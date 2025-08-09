@@ -67,6 +67,7 @@ model Dataset {
   originalFilename String?
   rowCount         Int?
   columns          Json?
+  sampleRows       Json?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

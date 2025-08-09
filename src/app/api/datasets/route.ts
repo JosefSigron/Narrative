@@ -5,6 +5,26 @@ import { parse } from "csv-parse/sync";
 
 export const runtime = "nodejs";
 
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const datasets = await prisma.dataset.findMany({
+    where: { userId: session.user.id },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      originalFilename: true,
+      rowCount: true,
+      columns: true,
+      createdAt: true,
+    },
+  });
+  return NextResponse.json({ datasets });
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -18,7 +38,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing file" }, { status: 400 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const buffer = Buffer.from(await (file as File).arrayBuffer());
   const text = buffer.toString("utf8");
 
   let records: any[] = [];
@@ -29,6 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   const columns = records.length > 0 ? Object.keys(records[0]) : [];
+  const sampleRows = records.slice(0, 20);
 
   const dataset = await prisma.dataset.create({
     data: {
@@ -36,7 +57,8 @@ export async function POST(req: NextRequest) {
       name,
       originalFilename: (file as File).name,
       rowCount: records.length,
-      columns: columns,
+      columns,
+      sampleRows,
     },
   });
 
