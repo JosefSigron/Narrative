@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import Reveal from '@/components/Reveal';
 
 export default function UploadForm() {
   const router = useRouter();
@@ -38,35 +39,36 @@ export default function UploadForm() {
   }
 
   return (
-    <form className='space-y-4' onSubmit={onSubmit} encType='multipart/form-data' data-reveal="pre">
-      <div>
-        <label className='block text-sm font-medium'>Dataset name</label>
-        <Input name='name' className='mt-1' placeholder='e.g. Sales Q1' />
-      </div>
-      <div>
-        <label className='block text-sm font-medium'>CSV file</label>
-        <div className='mt-1 flex items-center gap-3'>
-          <label className='inline-flex items-center gap-2 px-3 py-2 rounded border border-white/20 hover:bg-white/10 cursor-pointer text-cyan-400'>
-            {/* Attachment icon */}
-            <span
-              className='h-4 w-4 inline-block align-middle'
-              style={{
-                WebkitMask: "url(/icons/attachment.svg) no-repeat center / contain",
-                mask: "url(/icons/attachment.svg) no-repeat center / contain",
-                backgroundColor: "currentColor",
-              }}
-              aria-hidden
-            />
-            <span>Select file</span>
-            <input name='file' type='file' accept='.csv' className='hidden' onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)} />
-          </label>
-          <span className='text-sm opacity-80'>{fileName ?? 'No file selected'}</span>
+    <Reveal mode="toggle">
+      <form className='space-y-4' onSubmit={onSubmit} encType='multipart/form-data'>
+        <div>
+          <label className='block text-sm font-medium'>Dataset name</label>
+          <Input name='name' className='mt-1' placeholder='e.g. Sales Q1' />
         </div>
-      </div>
-      <Button disabled={isSubmitting} type='submit'>
-        {isSubmitting ? 'Uploading…' : 'Upload'}
-      </Button>
-    </form>
+        <div>
+          <label className='block text-sm font-medium'>CSV file</label>
+          <div className='mt-1 flex items-center gap-3'>
+            <label className='inline-flex items-center gap-2 px-3 py-2 rounded border border-white/20 hover:bg-white/10 cursor-pointer text-cyan-400'>
+              <span
+                className='h-4 w-4 inline-block align-middle'
+                style={{
+                  WebkitMask: "url(/icons/attachment.svg) no-repeat center / contain",
+                  mask: "url(/icons/attachment.svg) no-repeat center / contain",
+                  backgroundColor: "currentColor",
+                }}
+                aria-hidden
+              />
+              <span>Select file</span>
+              <input name='file' type='file' accept='.csv' className='hidden' onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)} />
+            </label>
+            <span className='text-sm opacity-80'>{fileName ?? 'No file selected'}</span>
+          </div>
+        </div>
+        <Button disabled={isSubmitting} type='submit'>
+          {isSubmitting ? 'Uploading…' : 'Upload'}
+        </Button>
+      </form>
+    </Reveal>
   );
 }
 

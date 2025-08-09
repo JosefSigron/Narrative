@@ -43,7 +43,7 @@ export default async function DashboardPage() {
         </div>
       </Reveal>
 
-      <Reveal>
+      <Reveal mode='toggle'>
         <Card>
           <CardHeader>
             <CardTitle className='text-lg'>Upload dataset</CardTitle>
@@ -59,7 +59,7 @@ export default async function DashboardPage() {
           <h2 className='text-lg font-medium mb-3'>Your datasets</h2>
         </Reveal>
         <div className='space-y-3'>
-          <Reveal delayMs={120}>
+          <Reveal delayMs={120} mode='toggle'>
             <DatasetList />
           </Reveal>
         </div>

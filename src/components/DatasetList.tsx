@@ -86,7 +86,7 @@ export default function DatasetList() {
   return (
     <div className="space-y-3">
       {datasets.map(ds => (
-        <Reveal key={ds.id} className="border rounded p-3 bg-card/60">
+        <Reveal key={ds.id} className="border rounded p-3 bg-card/60" mode="toggle">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="font-medium">{ds.name}</div>
@@ -183,6 +183,7 @@ export default function DatasetList() {
             </div>
           </div>
           {resultsByDataset[ds.id] && (
+            <Reveal mode="toggle">
             <div className="mt-3 text-sm">
               {resultsByDataset[ds.id].insights?.length ? (
                 <ul className="list-disc pl-5 space-y-1">
@@ -194,6 +195,7 @@ export default function DatasetList() {
                 <div className="text-gray-500">No insights found.</div>
               )}
             </div>
+            </Reveal>
           )}
         </Reveal>
       ))}
