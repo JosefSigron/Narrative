@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,11 +25,34 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+    <html lang="en" className="dark">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}
       >
-        {children}
+        <div className="min-h-screen flex flex-col">
+          <div className="top-accent absolute inset-x-0 top-0 h-48 pointer-events-none -z-10" aria-hidden />
+          <header className="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-black/30 bg-black/10 border-b border-white/10">
+            <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+              <a href="/" className="flex items-center gap-2">
+                <span className="font-semibold tracking-tight text-foreground">Narrative</span>
+                <span className="text-xs opacity-80 text-foreground">Data Storyteller</span>
+              </a>
+              <nav className="text-sm">
+                <a href="/dashboard" className="px-3 py-1.5 rounded border border-white/10 hover:bg-white/10 text-foreground">Dashboard</a>
+              </nav>
+            </div>
+          </header>
+          <TooltipProvider>
+            <main className="flex-1 bg-background">
+              {children}
+            </main>
+            <footer className="border-t border-white/10">
+              <div className="max-w-6xl mx-auto px-6 py-5 text-sm opacity-80">
+                © {new Date().getFullYear()} Narrative.
+              </div>
+            </footer>
+            <Toaster richColors closeButton />
+          </TooltipProvider>
+        </div>
       </body>
     </html>
   );

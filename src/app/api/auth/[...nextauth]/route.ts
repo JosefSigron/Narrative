@@ -1,1 +1,3 @@
-﻿export { handlers as GET, handlers as POST } from "@/auth/config";
+﻿import { handlers } from "@/auth/config";
+
+export const { GET, POST } = handlers;

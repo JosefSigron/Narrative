@@ -16,6 +16,8 @@
 # next.js
 /.next/
 /out/
+/.turbo/
+/.vercel/
 
 # production
 /build
@@ -31,10 +33,18 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
+.env.local
+.env.*.local
 
 # vercel
 .vercel
+
+# prisma local sqlite dbs
+prisma/*.db
+prisma/*.db-journal
+prisma/**/*.db
+prisma/**/*.db-journal
 
 # typescript
 *.tsbuildinfo

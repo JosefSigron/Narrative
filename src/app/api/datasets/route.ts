@@ -20,6 +20,7 @@ export async function GET() {
       rowCount: true,
       columns: true,
       createdAt: true,
+      _count: { select: { insights: true, charts: true, reports: true } },
     },
   });
   return NextResponse.json({ datasets });
@@ -63,4 +64,28 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ datasetId: dataset.id, columns, rowCount: records.length });
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let id: string | null = null;
+  try {
+    const body = await req.json();
+    id = body?.id ?? null;
+  } catch {}
+  if (!id) {
+    const url = new URL(req.url);
+    id = url.searchParams.get("id");
+  }
+  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+  const result = await prisma.dataset.deleteMany({ where: { id, userId: session.user.id } });
+  if (result.count === 0) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true, deleted: result.count });
 }

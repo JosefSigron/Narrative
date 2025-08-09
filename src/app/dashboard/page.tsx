@@ -1,50 +1,70 @@
 ﻿import { auth, signIn, signOut } from '@/auth/config';
 import DatasetList from '@/components/DatasetList';
+import UploadForm from '@/components/UploadForm';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import Reveal from '@/components/Reveal';
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) {
     return (
-      <div className='p-8'>
-        <h1 className='text-2xl font-semibold mb-4'>Sign in</h1>
-        <form action={async () => { 'use server'; await signIn('google'); }}>
-          <button className='px-4 py-2 bg-black text-white rounded'>Sign in with Google</button>
-        </form>
+      <div className='min-h-[70vh] flex items-center justify-center px-6'>
+        <Reveal className='w-full max-w-lg card p-8 text-center hover-scale'>
+          <h1 className='text-3xl font-semibold tracking-tight'>Welcome back</h1>
+          <p className='opacity-80 mt-2 text-sm'>Sign in to upload datasets and generate insights.</p>
+          <form className='mt-6' action={async () => { 'use server'; await signIn('google'); }}>
+            <Button className='w-full inline-flex items-center justify-center gap-2'>
+              <span
+                className='h-4 w-4 inline-block'
+                style={{
+                  WebkitMask: "url(/icons/google.svg) no-repeat center / contain",
+                  mask: "url(/icons/google.svg) no-repeat center / contain",
+                  backgroundColor: "currentColor",
+                }}
+                aria-hidden
+              />
+              Continue with Google
+            </Button>
+          </form>
+        </Reveal>
       </div>
     );
   }
 
   return (
-    <div className='p-8 space-y-6'>
-      <div className='flex items-center justify-between'>
-        <h1 className='text-2xl font-semibold'>Dashboard</h1>
-        <form action={async () => { 'use server'; await signOut(); }}>
-          <button className='px-3 py-2 border rounded'>Sign out</button>
-        </form>
-      </div>
+    <div className='max-w-6xl mx-auto px-6 py-10 space-y-8 bg-background'>
+      <Reveal>
+        <div className='flex items-center justify-between'>
+          <h1 className='text-3xl font-semibold tracking-tight'>Dashboard</h1>
+          <form action={async () => { 'use server'; await signOut(); }}>
+            <Button variant='outline' size='sm'>Sign out</Button>
+          </form>
+        </div>
+      </Reveal>
 
-      <UploadForm />
+      <Reveal>
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-lg'>Upload dataset</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <UploadForm />
+          </CardContent>
+        </Card>
+      </Reveal>
 
-      <div className='pt-4'>
-        <h2 className='text-lg font-medium mb-2'>Your datasets</h2>
-        <DatasetList />
+      <div>
+        <Reveal>
+          <h2 className='text-lg font-medium mb-3'>Your datasets</h2>
+        </Reveal>
+        <div className='space-y-3'>
+          <Reveal delayMs={120}>
+            <DatasetList />
+          </Reveal>
+        </div>
       </div>
     </div>
   );
 }
-
-function UploadForm() {
-  return (
-    <form className='space-y-4' action='/api/datasets' method='post' encType='multipart/form-data'>
-      <div>
-        <label className='block text-sm font-medium'>Dataset name</label>
-        <input name='name' className='mt-1 block w-full border rounded px-3 py-2' placeholder='e.g. Sales Q1' />
-      </div>
-      <div>
-        <label className='block text-sm font-medium'>CSV file</label>
-        <input name='file' type='file' accept='.csv' className='mt-1 block w-full' />
-      </div>
-      <button className='px-4 py-2 bg-blue-600 text-white rounded'>Upload</button>
-    </form>
-  );
-}
+ 
