@@ -1,5 +1,4 @@
 ﻿import { auth, signIn, signOut } from '@/auth/config';
-import DatasetList from '@/components/DatasetList';
 import UploadForm from '@/components/UploadForm';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,16 +53,14 @@ export default async function DashboardPage() {
         </Card>
       </Reveal>
 
-      <div>
-        <Reveal>
-          <h2 className='text-lg font-medium mb-3'>Your datasets</h2>
-        </Reveal>
-        <div className='space-y-3'>
-          <Reveal delayMs={120} mode='toggle'>
-            <DatasetList />
-          </Reveal>
+      <Reveal>
+        <div className='card p-6'>
+          <div className='text-sm opacity-80'>Go to Reports to view and manage your datasets.</div>
+          <div className='mt-3'>
+            <a href='/report' className='btn-primary inline-block px-4 py-2 rounded'>Open Reports</a>
+          </div>
         </div>
-      </div>
+      </Reveal>
     </div>
   );
 }

@@ -50,7 +50,22 @@ export async function POST(req: NextRequest) {
   }
 
   const columns = records.length > 0 ? Object.keys(records[0]) : [];
-  const sampleRows = records.slice(0, 20);
+  
+  // Improved sampling strategy: take exactly 1000 rows evenly distributed across the dataset
+  let sampleRows: any[] = [];
+  const totalRows = records.length;
+  if (totalRows <= 1000) {
+    sampleRows = records;
+  } else {
+    // Calculate step size to evenly distribute 1000 samples across totalRows
+    const step = (totalRows - 1) / (1000 - 1); // -1 to ensure we include the last row
+    for (let i = 0; i < 1000; i++) {
+      const index = Math.round(i * step);
+      // Ensure we don't exceed array bounds
+      const safeIndex = Math.min(index, totalRows - 1);
+      sampleRows.push(records[safeIndex]);
+    }
+  }
 
   const dataset = await prisma.dataset.create({
     data: {

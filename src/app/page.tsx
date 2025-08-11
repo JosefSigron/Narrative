@@ -23,13 +23,13 @@ export default function Home() {
               <Reveal as="div" className="hover-float" delayMs={160}>
                 <div className="mt-8 flex items-center gap-3">
                   <Link href="/dashboard" className="btn-animated px-5 py-2.5 rounded shadow-md hover:scale-[1.02] transition">Get started</Link>
-                  <a href="#how-it-works" className="px-5 py-2.5 rounded border border-white/15 hover:bg-white/10 transition">How it works</a>
+                  <a href="#how-it-works" className="px-5 py-2.5 rounded border border-pacific_cyan-500/20 hover:bg-pacific_cyan-500/10 transition">How it works</a>
                 </div>
               </Reveal>
             </div>
             <Reveal as="div" className="card p-6 hover-scale" delayMs={120}>
-            <div className="rounded-lg overflow-hidden border border-white/10">
-              <div className="aspect-[16/10] bg-gradient-to-br from-cyan-500/20 to-indigo-500/20"></div>
+            <div className="rounded-lg overflow-hidden border border-pacific_cyan-500/20">
+              <div className="aspect-[16/10] bg-gradient-to-br from-pacific_cyan-500/20 to-honolulu_blue-500/20"></div>
             </div>
             <div className="mt-4 text-sm opacity-80">Demo preview – dashboards & charts generated from your data.</div>
             </Reveal>
@@ -61,7 +61,7 @@ export default function Home() {
       </div>
       <div className="max-w-6xl mx-auto px-6 pb-28">
         <Reveal>
-          <h2 className="text-xl font-semibold tracking-tight">Why Narrative?</h2>
+          <h2 className="text-xl font-semibold tracking-tight">Why SumViz?</h2>
         </Reveal>
         <div className="mt-6 grid md:grid-cols-3 gap-4">
           <Reveal className="card p-6 hover-float">
@@ -83,7 +83,7 @@ export default function Home() {
         <Reveal className="card p-8 md:p-10 hover-scale">
           <div className="md:flex items-center justify-between">
             <div>
-              <div className="text-lg font-medium">Ready to turn data into narrative?</div>
+              <div className="text-lg font-medium">Ready to turn data into visuals and insight?</div>
               <div className="opacity-80 text-sm mt-2">Start with a simple CSV upload. No setup required.</div>
             </div>
             <div className="mt-4 md:mt-0">

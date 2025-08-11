@@ -1,49 +1,50 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+
 
 :root {
   --foreground-strong: #f8fafc;
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.705 0.015 286.067);
+  /* Light theme using the provided palette */
+  --background: var(--color-light_cyan-900);
+  --foreground: #0f172a;
+  --card: var(--color-light_cyan-900);
+  --card-foreground: #0f172a;
+  --popover: var(--color-light_cyan-900);
+  --popover-foreground: #0f172a;
+  --primary: var(--color-pacific_cyan-500);
+  --primary-foreground: #ffffff;
+  --secondary: var(--color-blue_green-500);
+  --secondary-foreground: #ffffff;
+  --muted: var(--color-non_photo_blue-700);
+  --muted-foreground: var(--color-marian_blue-900);
+  --accent: var(--color-vivid_sky_blue-500);
+  --accent-foreground: #0b1020;
+  --destructive: #ef4444;
+  --border: #89ebff33;
+  --input: #89ebff33;
+  --ring: var(--color-pacific_cyan-600);
+  --chart-1: var(--color-pacific_cyan-500);
+  --chart-2: var(--color-blue_green-500);
+  --chart-3: var(--color-marian_blue-500);
+  --chart-4: var(--color-vivid_sky_blue-500);
+  --chart-5: var(--color-honolulu_blue-500);
+  --sidebar: var(--color-light_cyan-900);
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: var(--color-pacific_cyan-500);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--color-vivid_sky_blue-500);
+  --sidebar-accent-foreground: #0b1020;
+  --sidebar-border: #89ebff33;
+  --sidebar-ring: var(--color-pacific_cyan-600);
 }
 
 /* Removed @theme for compatibility with tools that don't recognize Tailwind v4 at-rules */
 
 @media (prefers-color-scheme: light) {
   :root {
-    --background: #f7f9fc;
+    --background: var(--color-light_cyan-900);
     --foreground: #0f172a;
   }
 }
@@ -60,27 +61,31 @@ body {
 /* Subtle top accent glow */
 .top-accent {
   background:
-    radial-gradient(900px 360px at 50% -120px, rgba(99, 102, 241, 0.30), transparent 70%),
-    radial-gradient(700px 280px at 10% -120px, rgba(34, 211, 238, 0.22), transparent 70%),
-    radial-gradient(700px 280px at 90% -120px, rgba(16, 185, 129, 0.16), transparent 70%);
+    radial-gradient(900px 360px at 50% -120px, color-mix(in oklab, var(--color-marian_blue-700), transparent 55%), transparent 70%),
+    radial-gradient(700px 280px at 10% -120px, color-mix(in oklab, var(--color-pacific_cyan-500), transparent 65%), transparent 70%),
+    radial-gradient(700px 280px at 90% -120px, color-mix(in oklab, var(--color-blue_green-500), transparent 75%), transparent 70%);
   filter: blur(0.5px);
 }
 
 /* Utility-like classes without adding a framework */
 .card {
   border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in oklab, var(--color-marian_blue-500), transparent 90%);
   backdrop-filter: saturate(140%) blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid #89ebff40;
 }
 
 .card-light {
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: color-mix(in oklab, var(--color-light_cyan-900), white 80%);
+  border: 1px solid #89ebff2e;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  background: linear-gradient(
+    135deg,
+    var(--color-pacific_cyan-500),
+    var(--color-honolulu_blue-500)
+  );
   color: white;
 }
 
@@ -93,9 +98,14 @@ body {
 /* Animated gradient button */
 .btn-animated {
   color: white;
-  background: linear-gradient(90deg, #22d3ee, #6366f1, #22d3ee);
+  background: linear-gradient(
+    90deg,
+    var(--color-vivid_sky_blue-500),
+    var(--color-marian_blue-500),
+    var(--color-vivid_sky_blue-500)
+  );
   background-size: 200% 100%;
-  box-shadow: 0 10px 25px rgba(99,102,241, .25);
+  box-shadow: 0 10px 25px #00b4d83d;
   transition: transform .25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow .25s cubic-bezier(0.22, 1, 0.36, 1), filter .25s cubic-bezier(0.22, 1, 0.36, 1);
   animation: gradient-move 8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
@@ -194,41 +204,141 @@ button:disabled, [aria-disabled="true"] {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* App palette */
+  --color-federal_blue: #03045e;
+  --color-federal_blue-100: #010113;
+  --color-federal_blue-200: #010226;
+  --color-federal_blue-300: #020338;
+  --color-federal_blue-400: #02044b;
+  --color-federal_blue-500: #03045e;
+  --color-federal_blue-600: #0508ae;
+  --color-federal_blue-700: #0f12f8;
+  --color-federal_blue-800: #5f61fa;
+  --color-federal_blue-900: #afb0fd;
+
+  --color-marian_blue: #023e8a;
+  --color-marian_blue-100: #000c1b;
+  --color-marian_blue-200: #011836;
+  --color-marian_blue-300: #012451;
+  --color-marian_blue-400: #02306d;
+  --color-marian_blue-500: #023e8a;
+  --color-marian_blue-600: #035cd1;
+  --color-marian_blue-700: #2381fc;
+  --color-marian_blue-800: #6cabfd;
+  --color-marian_blue-900: #b6d5fe;
+
+  --color-honolulu_blue: #0077b6;
+  --color-honolulu_blue-100: #001825;
+  --color-honolulu_blue-200: #003049;
+  --color-honolulu_blue-300: #00486e;
+  --color-honolulu_blue-400: #005f93;
+  --color-honolulu_blue-500: #0077b6;
+  --color-honolulu_blue-600: #00a2f9;
+  --color-honolulu_blue-700: #3bbaff;
+  --color-honolulu_blue-800: #7cd1ff;
+  --color-honolulu_blue-900: #bee8ff;
+
+  --color-blue_green: #0096c7;
+  --color-blue_green-100: #001e28;
+  --color-blue_green-200: #003c50;
+  --color-blue_green-300: #005a77;
+  --color-blue_green-400: #00779f;
+  --color-blue_green-500: #0096c7;
+  --color-blue_green-600: #06c1ff;
+  --color-blue_green-700: #44d0ff;
+  --color-blue_green-800: #83e0ff;
+  --color-blue_green-900: #c1efff;
+
+  --color-pacific_cyan: #00b4d8;
+  --color-pacific_cyan-100: #00242b;
+  --color-pacific_cyan-200: #004756;
+  --color-pacific_cyan-300: #006b81;
+  --color-pacific_cyan-400: #008fab;
+  --color-pacific_cyan-500: #00b4d8;
+  --color-pacific_cyan-600: #12d8ff;
+  --color-pacific_cyan-700: #4ee1ff;
+  --color-pacific_cyan-800: #89ebff;
+  --color-pacific_cyan-900: #c4f5ff;
+
+  --color-vivid_sky_blue: #48cae4;
+  --color-vivid_sky_blue-100: #082d34;
+  --color-vivid_sky_blue-200: #105a69;
+  --color-vivid_sky_blue-300: #17879d;
+  --color-vivid_sky_blue-400: #1fb4d1;
+  --color-vivid_sky_blue-500: #48cae4;
+  --color-vivid_sky_blue-600: #6dd5e9;
+  --color-vivid_sky_blue-700: #92dfef;
+  --color-vivid_sky_blue-800: #b6eaf4;
+  --color-vivid_sky_blue-900: #dbf4fa;
+
+  --color-non_photo_blue: #90e0ef;
+  --color-non_photo_blue-100: #0a3a43;
+  --color-non_photo_blue-200: #137586;
+  --color-non_photo_blue-300: #1dafc9;
+  --color-non_photo_blue-400: #4ccfe6;
+  --color-non_photo_blue-500: #90e0ef;
+  --color-non_photo_blue-600: #a6e7f2;
+  --color-non_photo_blue-700: #bcedf5;
+  --color-non_photo_blue-800: #d2f3f9;
+  --color-non_photo_blue-900: #e9f9fc;
+
+  --color-non_photo_blue_alt: #ade8f4;
+  --color-non_photo_blue_alt-100: #0a3f4a;
+  --color-non_photo_blue_alt-200: #147e93;
+  --color-non_photo_blue_alt-300: #1ebddd;
+  --color-non_photo_blue_alt-400: #65d4ea;
+  --color-non_photo_blue_alt-500: #ade8f4;
+  --color-non_photo_blue_alt-600: #beedf6;
+  --color-non_photo_blue_alt-700: #cff1f8;
+  --color-non_photo_blue_alt-800: #dff6fb;
+  --color-non_photo_blue_alt-900: #effafd;
+
+  --color-light_cyan: #caf0f8;
+  --color-light_cyan-100: #0a444f;
+  --color-light_cyan-200: #15889f;
+  --color-light_cyan-300: #2ac4e3;
+  --color-light_cyan-400: #79daee;
+  --color-light_cyan-500: #caf0f8;
+  --color-light_cyan-600: #d4f3f9;
+  --color-light_cyan-700: #dff6fb;
+  --color-light_cyan-800: #e9f9fc;
+  --color-light_cyan-900: #f4fcfe;
 }
 
 .dark {
-  /* Dark navy/blue theme - lighter than black */
-  --background: oklch(0.26 0.03 260);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.3 0.03 260);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.3 0.03 260);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.62 0.12 262);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.34 0.02 260);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.34 0.02 260);
-  --muted-foreground: oklch(0.8 0.02 260);
-  --accent: oklch(0.34 0.02 260);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 14%);
-  --input: oklch(1 0 0 / 18%);
-  --ring: oklch(0.7 0.12 262);
-  --chart-1: oklch(0.55 0.2 262);
-  --chart-2: oklch(0.64 0.15 200);
-  --chart-3: oklch(0.7 0.18 70);
-  --chart-4: oklch(0.58 0.22 300);
-  --chart-5: oklch(0.62 0.22 20);
-  --sidebar: oklch(0.3 0.03 260);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.62 0.12 262);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.34 0.02 260);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 14%);
-  --sidebar-ring: oklch(0.7 0.12 262);
+  /* Dark theme using the provided blue palette */
+  --background: var(--color-federal_blue-400);
+  --foreground: #ffffff;
+  --card: var(--color-marian_blue-400);
+  --card-foreground: #ffffff;
+  --popover: var(--color-marian_blue-400);
+  --popover-foreground: #ffffff;
+  --primary: var(--color-pacific_cyan-500);
+  --primary-foreground: #0b1020;
+  --secondary: var(--color-blue_green-500);
+  --secondary-foreground: #0b1020;
+  --muted: var(--color-marian_blue-600);
+  --muted-foreground: var(--color-non_photo_blue-700);
+  --accent: var(--color-vivid_sky_blue-500);
+  --accent-foreground: #0b1020;
+  --destructive: #ef4444;
+  --border: #00b4d83f;
+  --input: #00b4d845;
+  --ring: var(--color-pacific_cyan-600);
+  --chart-1: var(--color-pacific_cyan-500);
+  --chart-2: var(--color-blue_green-500);
+  --chart-3: var(--color-marian_blue-500);
+  --chart-4: var(--color-vivid_sky_blue-500);
+  --chart-5: var(--color-honolulu_blue-500);
+  --sidebar: var(--color-marian_blue-400);
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: var(--color-pacific_cyan-500);
+  --sidebar-primary-foreground: #0b1020;
+  --sidebar-accent: var(--color-vivid_sky_blue-500);
+  --sidebar-accent-foreground: #0b1020;
+  --sidebar-border: #00b4d83f;
+  --sidebar-ring: var(--color-pacific_cyan-600);
 }
 
 @layer base {

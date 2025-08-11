@@ -24,13 +24,15 @@ export default function UploadForm() {
         toast.error('Upload failed', { description: String(json?.error || 'unknown') });
         return;
       }
-      // Notify other components to refresh their data
+      // Immediately open the report page in a new tab and start generation
+      const datasetId = json?.datasetId as string | undefined;
+      if (datasetId) {
+        window.location.href = `/report/${datasetId}`;
+      }
       window.dispatchEvent(new CustomEvent('datasets:updated'));
-      // Optionally re-render server components
       router.refresh();
-      // Reset the form
       form.reset();
-      toast.success('Uploaded successfully');
+      toast.success('Dataset received. Generating…');
     } catch (e: any) {
       toast.error('Upload error', { description: String(e?.message || e) });
     } finally {
@@ -48,7 +50,7 @@ export default function UploadForm() {
         <div>
           <label className='block text-sm font-medium'>CSV file</label>
           <div className='mt-1 flex items-center gap-3'>
-            <label className='inline-flex items-center gap-2 px-3 py-2 rounded border border-white/20 hover:bg-white/10 cursor-pointer text-cyan-400'>
+            <label className='inline-flex items-center gap-2 px-3 py-2 rounded border border-pacific_cyan-500/20 hover:bg-pacific_cyan-500/10 cursor-pointer text-pacific_cyan-400'>
               <span
                 className='h-4 w-4 inline-block align-middle'
                 style={{
@@ -65,7 +67,7 @@ export default function UploadForm() {
           </div>
         </div>
         <Button disabled={isSubmitting} type='submit'>
-          {isSubmitting ? 'Uploading…' : 'Upload'}
+          {isSubmitting ? 'Generating…' : 'Generate'}
         </Button>
       </form>
     </Reveal>

@@ -1,4 +1,4 @@
-## Narrative Data Storyteller – Local Setup
+## SumViz – Local Setup
 
 ### 1) Prerequisites
 - Node 18+ and npm
