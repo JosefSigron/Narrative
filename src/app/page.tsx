@@ -23,13 +23,13 @@ export default function Home() {
               <Reveal as="div" className="hover-float" delayMs={160}>
                 <div className="mt-8 flex items-center gap-3">
                   <Link href="/dashboard" className="btn-animated px-5 py-2.5 rounded shadow-md hover:scale-[1.02] transition">Get started</Link>
-                  <a href="#how-it-works" className="px-5 py-2.5 rounded border border-pacific_cyan-500/20 hover:bg-pacific_cyan-500/10 transition">How it works</a>
+                  <a href="#how-it-works" className="px-5 py-2.5 rounded border border-burnt_sienna-500/30 hover:bg-burnt_sienna-500/10 transition">How it works</a>
                 </div>
               </Reveal>
             </div>
             <Reveal as="div" className="card p-6 hover-scale" delayMs={120}>
-            <div className="rounded-lg overflow-hidden border border-pacific_cyan-500/20">
-              <div className="aspect-[16/10] bg-gradient-to-br from-pacific_cyan-500/20 to-honolulu_blue-500/20"></div>
+            <div className="rounded-lg overflow-hidden border border-burnt_sienna-500/20">
+              <div className="aspect-[16/10] bg-gradient-to-br from-saffron-500/25 via-sandy_brown-500/25 to-burnt_sienna-500/25"></div>
             </div>
             <div className="mt-4 text-sm opacity-80">Demo preview – dashboards & charts generated from your data.</div>
             </Reveal>

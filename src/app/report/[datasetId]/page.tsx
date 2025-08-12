@@ -21,6 +21,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  Legend,
 } from "recharts";
 // Chart configuration and styling constants
 const CHART_COLORS = ["#00b4d8", "#0096c7", "#48cae4", "#0077b6", "#023e8a"];
@@ -38,6 +39,17 @@ export default function ReportPage({ params }: Props) {
   const [generating, setGenerating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
+  
+  // Initialize analysis mode from URL parameter
+  const [useSampling, setUseSampling] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const mode = urlParams.get('mode');
+      return mode !== 'deep'; // Default to fast (sampling) unless 'deep' is specified
+    }
+    return true;
+  });
+  const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
   
   // Generation timing state
   const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
@@ -72,7 +84,9 @@ export default function ReportPage({ params }: Props) {
   async function startGeneration(isRegeneration: boolean = false) {
     setGenerating(true);
     setGenerationStartTime(Date.now());
-    setGenerationProgress(isRegeneration ? "Regenerating insights..." : "Analyzing your data...");
+    setGenerationProgress(isRegeneration ? 
+      `Regenerating insights using ${useSampling ? 'Fast Analysis' : 'Deep Analysis'}...` : 
+      `Analyzing your data using ${useSampling ? 'Fast Analysis' : 'Deep Analysis'}...`);
     
     // Get estimate based on previous generation times if available
     const lastGenerationTime = localStorage.getItem('lastGenerationTime');
@@ -89,13 +103,34 @@ export default function ReportPage({ params }: Props) {
       const res = await fetch(`/api/insights`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ datasetId, regenerate: isRegeneration }),
+        body: JSON.stringify({ datasetId, regenerate: isRegeneration, useSampling }),
       });
       
       if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        const msg = [j?.error, j?.detail].filter(Boolean).join(': ');
-        throw new Error(msg || "Generation failed");
+        let errorMsg = "Generation failed";
+        try {
+          const j = await res.json();
+          errorMsg = [j?.error, j?.detail].filter(Boolean).join(': ') || errorMsg;
+        } catch (jsonError) {
+          // If JSON parsing fails, try to get text response
+          try {
+            const text = await res.text();
+            errorMsg = text || `HTTP ${res.status}: ${res.statusText}`;
+          } catch {
+            errorMsg = `HTTP ${res.status}: ${res.statusText}`;
+          }
+        }
+        throw new Error(errorMsg);
+      }
+
+      // Read response details for telemetry of fallback/mode
+      let responseJson: any = null;
+      try {
+        const responseText = await res.text();
+        responseJson = responseText ? JSON.parse(responseText) : null;
+      } catch (jsonError) {
+        console.error('Invalid JSON response from insights API:', jsonError);
+        throw new Error('Server returned invalid response format');
       }
 
       setGenerationProgress("Processing results...");
@@ -113,7 +148,15 @@ export default function ReportPage({ params }: Props) {
         const ready = Boolean((current?.insights?.length ?? 0) > 0 || (current?.charts?.length ?? 0) > 0 || current?.report);
         
         if (ready) {
-          setGenerationProgress("Complete!");
+          // Show mode and fallback information for transparency
+          if (responseJson?.mode === 'chat') {
+            const why = responseJson?.fallbackReason ? ` (fallback: ${responseJson.fallbackReason})` : '';
+            setGenerationProgress(`Complete! Used Chat Completions${why}.`);
+          } else if (responseJson?.mode === 'assistants') {
+            setGenerationProgress('Complete! Used Assistants API.');
+          } else {
+            setGenerationProgress('Complete!');
+          }
           setDetail(current);
           
           // Store actual generation time for future estimates  
@@ -128,7 +171,7 @@ export default function ReportPage({ params }: Props) {
         setEstimatedTimeRemaining(Math.round(remaining));
         
         if (pollCount <= 3) {
-          setGenerationProgress("Analyzing data structure...");
+          setGenerationProgress(`Analyzing data structure (${useSampling ? 'Fast Analysis' : 'Deep Analysis'})...`);
         } else if (pollCount <= 8) {
           setGenerationProgress("Generating insights...");
         } else if (pollCount <= 15) {
@@ -146,6 +189,20 @@ export default function ReportPage({ params }: Props) {
     ensureGenerated();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasetId]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (dropdownOpen) {
+        setDropdownOpen(false);
+      }
+    };
+
+    if (dropdownOpen) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [dropdownOpen]);
 
   const dataset = detail?.dataset;
   const charts = detail?.charts ?? [];
@@ -224,25 +281,52 @@ export default function ReportPage({ params }: Props) {
     const numericValues = values.map(parseNumber).filter(v => isFinite(v));
     if (numericValues.length === 0) return [];
 
-    const min = Math.min(...numericValues);
-    const max = Math.max(...numericValues);
-    if (min === max) return [{ [xKey]: min, value: numericValues.length }];
+    const minVal = Math.min(...numericValues);
+    const maxVal = Math.max(...numericValues);
+    if (minVal === maxVal) return [{ [xKey]: `${minVal} - ${maxVal}`, value: numericValues.length }];
 
-    const binSize = (max - min) / bins;
-    const histogram = new Array(bins).fill(0).map((_, i) => ({
-      [xKey]: `${(min + i * binSize).toFixed(1)} - ${(min + (i + 1) * binSize).toFixed(1)}`,
+    const range = maxVal - minVal;
+    const rawBinWidth = range / bins;
+    const pow10 = Math.pow(10, Math.floor(Math.log10(rawBinWidth)));
+    const candidates = [1, 2, 5, 10].map(m => m * pow10);
+    let binWidth = candidates[0];
+    for (const c of candidates) {
+      if (range / c <= bins) { binWidth = c; break; }
+      binWidth = c; // fallback to the last if none <= bins
+    }
+
+    // Snap start to a clean boundary
+    const start = Math.floor(minVal / binWidth) * binWidth;
+    const binCount = Math.max(1, Math.ceil((maxVal - start) / binWidth));
+
+    const histogram = new Array(binCount).fill(0).map((_, i) => ({
+      _lower: start + i * binWidth,
+      _upper: start + (i + 1) * binWidth,
       value: 0,
-      binIndex: i
+      binIndex: i,
     }));
 
     numericValues.forEach(value => {
-      let binIndex = Math.floor((value - min) / binSize);
-      if (binIndex >= bins) binIndex = bins - 1;
-      if (binIndex < 0) binIndex = 0;
-      histogram[binIndex].value++;
+      let idx = Math.floor((value - start) / binWidth);
+      if (idx >= binCount) idx = binCount - 1; // include max in last bin
+      if (idx < 0) idx = 0;
+      histogram[idx].value++;
     });
 
-    return histogram.filter(bin => bin.value > 0);
+    const formatNumber = (n: number) => {
+      const abs = Math.abs(n);
+      if (binWidth >= 1000) return Math.floor(n).toString();
+      if (binWidth >= 100) return Math.floor(n).toString();
+      if (binWidth >= 10) return Math.floor(n).toString();
+      return Number(n.toFixed(1)).toString();
+    };
+
+    return histogram
+      .filter(bin => bin.value > 0)
+      .map(bin => ({
+        [xKey]: `${formatNumber(bin._lower)} - ${formatNumber(bin._upper)}${bin.binIndex === binCount - 1 ? '' : ''}`,
+        value: bin.value,
+      }));
   };
 
   const processChartData = (sampleRows: any[], spec: any) => {
@@ -258,6 +342,15 @@ export default function ReportPage({ params }: Props) {
       // Get values for analysis
       const xValues = rows.map(r => r?.[xKey]).filter(v => v != null && v !== '');
       const yValues = yKey ? rows.map(r => r?.[yKey]).filter(v => v != null && v !== '') : [];
+      const numericCheck = (v: any) => {
+        if (typeof v === 'number') return isFinite(v);
+        if (typeof v === 'string') {
+          const cleaned = v.replace(/[,$%]/g, '');
+          return !isNaN(parseFloat(cleaned));
+        }
+        return false;
+      };
+      const looksNumeric = xValues.length > 0 && (xValues.filter(numericCheck).length / xValues.length) >= 0.8;
       
       // Debug logging to track data loss
       console.log(`🔍 Data Processing Debug:`, {
@@ -286,12 +379,22 @@ export default function ReportPage({ params }: Props) {
 
       // Handle histogram type specifically
       if (spec?.type === 'histogram') {
-        return createHistogramData(xValues, xKey, 12);
+        const binCount = xValues.length > 400 ? 30 : xValues.length > 100 ? 20 : 12;
+        return createHistogramData(xValues, xKey, binCount);
       }
 
       // Auto-detect data type if not specified correctly
       const actualXType = detectDataType(xValues);
       const actualYType = yKey ? detectDataType(yValues) : 'numeric';
+
+      // If many unique numeric x with count aggregation, auto-convert to histogram bins for readability
+      if ((spec?.type === 'bar' || spec?.type === 'histogram') && !yKey && (actualXType === 'numeric' || looksNumeric)) {
+        const uniqueCount = new Set(xValues.map(v => String(v))).size;
+        if (uniqueCount > 20) {
+          const binCount = xValues.length > 400 ? 30 : xValues.length > 100 ? 20 : 12;
+          return createHistogramData(xValues, xKey, binCount);
+        }
+      }
 
       // Process based on chart type and aggregation
       if (aggregation === 'count' || (!yKey && type !== 'scatter')) {
@@ -302,21 +405,33 @@ export default function ReportPage({ params }: Props) {
           const xVal = row?.[xKey];
           if (xVal == null || xVal === '') continue;
           
-          const key = String(xVal);
+          const key = String(xVal).trim();
           counts.set(key, (counts.get(key) || 0) + 1);
         }
 
-        return Array.from(counts.entries())
+        let arr = Array.from(counts.entries())
           .map(([key, count]) => ({
-            [xKey]: actualXType === 'numeric' ? parseNumber(key) : key,
+            [xKey]: looksNumeric ? parseNumber(key) : (actualXType === 'numeric' ? parseNumber(key) : key),
             value: count
-          }))
-          .sort((a, b) => {
-            if (actualXType === 'numeric') {
-              return (a[xKey] as number) - (b[xKey] as number);
-            }
-            return String(a[xKey]).localeCompare(String(b[xKey]));
-          });
+          }));
+        arr = arr.sort((a, b) => {
+          if (looksNumeric || actualXType === 'numeric') {
+            return (a[xKey] as number) - (b[xKey] as number);
+          }
+          return String(a[xKey]).localeCompare(String(b[xKey]));
+        });
+        // Too many categories -> keep top-N by count and group rest into 'Other'
+        const MAX_CATEGORIES = 20;
+        if (!looksNumeric && arr.length > MAX_CATEGORIES) {
+          const sortedByValue = [...arr].sort((a, b) => (b.value as number) - (a.value as number));
+          const top = sortedByValue.slice(0, MAX_CATEGORIES);
+          const rest = sortedByValue.slice(MAX_CATEGORIES);
+          const otherTotal = rest.reduce((sum, r) => sum + (r.value as number), 0);
+          arr = top.concat({ [xKey]: 'Other', value: otherTotal } as any);
+          // Keep bars ordered by value desc for readability
+          arr = arr.sort((a, b) => (b.value as number) - (a.value as number));
+        }
+        return arr;
       }
 
       if (aggregation === 'sum' && yKey) {
@@ -328,21 +443,31 @@ export default function ReportPage({ params }: Props) {
           const yVal = parseNumber(row?.[yKey]);
           if (xVal == null || xVal === '') continue;
           
-          const key = String(xVal);
+          const key = String(xVal).trim();
           sums.set(key, (sums.get(key) || 0) + yVal);
         }
 
-        return Array.from(sums.entries())
-          .map(([key, sum]) => ({
-            [xKey]: actualXType === 'numeric' ? parseNumber(key) : key,
-            [yKey]: sum
-          }))
-          .sort((a, b) => {
-            if (actualXType === 'numeric') {
-              return (a[xKey] as number) - (b[xKey] as number);
-            }
-            return String(a[xKey]).localeCompare(String(b[xKey]));
-          });
+        let arr = Array.from(sums.entries()).map(([key, sum]) => ({
+          [xKey]: looksNumeric ? parseNumber(key) : (actualXType === 'numeric' ? parseNumber(key) : key),
+          [yKey]: sum
+        }));
+        arr = arr.sort((a, b) => {
+          if (looksNumeric || actualXType === 'numeric') {
+            return (a[xKey] as number) - (b[xKey] as number);
+          }
+          return String(a[xKey]).localeCompare(String(b[xKey]));
+        });
+        // Too many categories -> keep top-N by summed metric
+        const MAX_CATEGORIES = 20;
+        if (!looksNumeric && arr.length > MAX_CATEGORIES) {
+          const sortedByMetric = [...arr].sort((a: any, b: any) => (b[yKey] as number) - (a[yKey] as number));
+          const top = sortedByMetric.slice(0, MAX_CATEGORIES);
+          const rest = sortedByMetric.slice(MAX_CATEGORIES);
+          const otherTotal = rest.reduce((sum, r: any) => sum + (r[yKey] as number), 0);
+          arr = top.concat({ [xKey]: 'Other', [yKey]: otherTotal } as any);
+          arr = arr.sort((a: any, b: any) => (b[yKey] as number) - (a[yKey] as number));
+        }
+        return arr;
       }
 
       if (aggregation === 'avg' && yKey) {
@@ -354,22 +479,46 @@ export default function ReportPage({ params }: Props) {
           const yVal = parseNumber(row?.[yKey]);
           if (xVal == null || xVal === '') continue;
           
-          const key = String(xVal);
+          const key = String(xVal).trim();
           const existing = groups.get(key) || { sum: 0, count: 0 };
           groups.set(key, { sum: existing.sum + yVal, count: existing.count + 1 });
         }
 
-        return Array.from(groups.entries())
+        let arr = Array.from(groups.entries())
           .map(([key, { sum, count }]) => ({
-            [xKey]: actualXType === 'numeric' ? parseNumber(key) : key,
-            [yKey]: count > 0 ? sum / count : 0
-          }))
-          .sort((a, b) => {
-            if (actualXType === 'numeric') {
-              return (a[xKey] as number) - (b[xKey] as number);
-            }
-            return String(a[xKey]).localeCompare(String(b[xKey]));
+            [xKey]: looksNumeric ? parseNumber(key) : (actualXType === 'numeric' ? parseNumber(key) : key),
+            [yKey]: count > 0 ? sum / count : 0,
+            _sum: sum,
+            _count: count
+          }));
+        arr = arr.sort((a, b) => {
+          if (looksNumeric || actualXType === 'numeric') {
+            return (a[xKey] as number) - (b[xKey] as number);
+          }
+          return String(a[xKey]).localeCompare(String(b[xKey]));
+        });
+        // Too many categories -> keep top-N by average and group rest into 'Other' using weighted average
+        const MAX_CATEGORIES = 20;
+        if (!looksNumeric && arr.length > MAX_CATEGORIES) {
+          const sortedByAvg = [...arr].sort((a: any, b: any) => (b[yKey] as number) - (a[yKey] as number));
+          const top = sortedByAvg.slice(0, MAX_CATEGORIES);
+          const rest = sortedByAvg.slice(MAX_CATEGORIES);
+          const otherSum = rest.reduce((s, r: any) => s + (r._sum as number), 0);
+          const otherCount = rest.reduce((c, r: any) => c + (r._count as number), 0);
+          const otherAvg = otherCount > 0 ? otherSum / otherCount : 0;
+          const other: any = { [xKey]: 'Other', [yKey]: otherAvg };
+          arr = top.concat(other) as any;
+          arr = (arr as any).map((entry: any) => {
+            const { _sum: _dropSum, _count: _dropCount, ...rest } = entry as any;
+            return rest as any;
           });
+        } else {
+          arr = (arr as any).map((entry: any) => {
+            const { _sum: _dropSum, _count: _dropCount, ...rest } = entry as any;
+            return rest as any;
+          });
+        }
+        return arr as any[];
       }
 
       // If chart is a BAR with non-aggregated categorical x and duplicates, auto-aggregate to avoid repeated x
@@ -411,6 +560,13 @@ export default function ReportPage({ params }: Props) {
           rawData.forEach((item, idx) => {
             (item as any).value = Math.random() * 0.8 + 0.1; // Random between 0.1 and 0.9
           });
+        }
+      }
+
+      // If x-axis is temporal and too many points, prefer scatter for readability
+      if (type === 'line' || type === 'area') {
+        if (actualXType === 'temporal' && rawData.length > 20) {
+          return rawData.map(d => ({ ...d, _forceScatter: true }));
         }
       }
 
@@ -576,8 +732,16 @@ export default function ReportPage({ params }: Props) {
                       />
                       <YAxis {...AXIS_STYLING} />
                       <RTooltip 
-                        formatter={(value, name) => [value, aggregation === 'count' ? 'Count' : name]}
-                        labelFormatter={(label) => `${xKey}: ${label}`}
+                        formatter={(value, name, props: any) => {
+                          const labelKey = dataKey === 'value' ? (aggregation === 'count' ? 'Count' : (yKey || 'Value')) : dataKey;
+                          return [value, labelKey];
+                        }}
+                        labelFormatter={(label, payload) => {
+                          const first = Array.isArray(payload) && payload[0] ? payload[0] : null;
+                          const raw = first?.payload?._rowData || {};
+                          // Prefer raw label if available
+                          return `${xKey}: ${label}`;
+                        }}
                       />
                       <Bar 
                         dataKey={dataKey}
@@ -589,7 +753,15 @@ export default function ReportPage({ params }: Props) {
                 } else if (type === "line") {
                   return (
                     <LineChart data={limitedData}>
-                      <XAxis dataKey={xKey} {...AXIS_STYLING} />
+                      <XAxis 
+                        dataKey={xKey} 
+                        {...AXIS_STYLING}
+                        tick={{ ...AXIS_STYLING.tick, fontSize: 10 }}
+                        interval={limitedData.length > 20 ? Math.ceil(limitedData.length / 10) : 0}
+                        angle={limitedData.length > 20 ? -30 : 0}
+                        textAnchor={limitedData.length > 20 ? "end" : "middle"}
+                        height={limitedData.length > 20 ? 60 : 30}
+                      />
                       <YAxis {...AXIS_STYLING} />
                       <RTooltip 
                         formatter={(value, name) => [value, yKey || 'Value']}
@@ -607,7 +779,15 @@ export default function ReportPage({ params }: Props) {
                 } else if (type === "area") {
                   return (
                     <AreaChart data={limitedData}>
-                      <XAxis dataKey={xKey} {...AXIS_STYLING} />
+                      <XAxis 
+                        dataKey={xKey} 
+                        {...AXIS_STYLING}
+                        tick={{ ...AXIS_STYLING.tick, fontSize: 10 }}
+                        interval={limitedData.length > 20 ? Math.ceil(limitedData.length / 10) : 0}
+                        angle={limitedData.length > 20 ? -30 : 0}
+                        textAnchor={limitedData.length > 20 ? "end" : "middle"}
+                        height={limitedData.length > 20 ? 60 : 30}
+                      />
                       <YAxis {...AXIS_STYLING} />
                       <RTooltip 
                         formatter={(value, name) => [value, yKey || 'Value']}
@@ -622,7 +802,7 @@ export default function ReportPage({ params }: Props) {
                       />
                     </AreaChart>
                   );
-                } else if (type === "scatter") {
+                } else if (type === "scatter" || limitedData.some((d: any) => d?._forceScatter)) {
                   return (
                     <ScatterChart data={limitedData}>
                       <XAxis 
@@ -630,6 +810,7 @@ export default function ReportPage({ params }: Props) {
                         {...AXIS_STYLING}
                         type="number"
                         domain={['dataMin', 'dataMax']}
+                        tick={{ ...AXIS_STYLING.tick, fontSize: 10 }}
                       />
                       <YAxis 
                         dataKey={yKey} 
@@ -651,7 +832,31 @@ export default function ReportPage({ params }: Props) {
                   return (
                     <PieChart>
                       <RTooltip 
-                        formatter={(value, name) => [value, 'Count']}
+                        content={({ active, payload }) => {
+                          if (!active || !payload || !payload[0]) return null;
+                          const hovered = payload[0].payload || {};
+                          const metricLabel = aggregation === 'count' ? 'Count' : (yKey || 'Value');
+                          const summaryPairs = limitedData.slice(0, 12)
+                            .map((d: any) => `${d?.[xKey]}: ${d?.[dataKey]}`)
+                            .join(' • ');
+                          return (
+                            <div className="card p-2 text-xs">
+                              <div className="font-medium">{xKey}: {hovered?.[xKey]}</div>
+                              <div>{metricLabel}: {hovered?.[dataKey]}</div>
+                              <div className="opacity-70 mt-1">{summaryPairs}</div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Legend 
+                        verticalAlign="bottom" 
+                        height={24} 
+                        formatter={(value: any) => {
+                          const match = limitedData.find((d: any) => String(d?.[xKey]) === String(value));
+                          const val = match ? match[dataKey] : undefined;
+                          const metric = aggregation === 'count' ? 'Count' : (yKey || 'Value');
+                          return `${value} (${metric}: ${val ?? '-'})`;
+                        }}
                       />
                       <Pie 
                         data={limitedData.slice(0, 12)} // Limit pie segments for readability
@@ -728,20 +933,107 @@ export default function ReportPage({ params }: Props) {
             <h1 className="text-3xl md:text-5xl font-semibold tracking-tight">{dataset?.name || "Dataset"}</h1>
             <div className="text-sm opacity-80 mt-2">{dataset?.originalFilename} • {dataset?.rowCount} rows</div>
           </div>
-          <div className="flex items-center gap-2">
-            <ConfirmRegenerate onConfirm={async () => {
-              setError(null);
-              try {
-                await startGeneration(true);
-              } catch (e: any) {
-                setError(String(e?.message || e));
-              } finally {
-                setGenerating(false);
-                setGenerationStartTime(null);
-                setEstimatedTimeRemaining(null);
-                setGenerationProgress("");
-              }
-            }} disabled={generating} />
+          <div className="flex items-center gap-3">
+            {/* Analysis Mode Dropdown */}
+            <div className="relative">
+              <Button
+                variant="outline"
+                className="flex items-center gap-2 text-sm px-3 py-1.5 h-auto"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDropdownOpen(!dropdownOpen);
+                }}
+                disabled={generating}
+              >
+                <div className="flex items-center gap-2">
+                  {useSampling ? (
+                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                  <span className="font-medium">
+                    {useSampling ? "Fast Analysis" : "Deep Analysis"}
+                  </span>
+                </div>
+                <svg className="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </Button>
+              
+              {dropdownOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-10" 
+                    onClick={() => setDropdownOpen(false)}
+                  />
+                  <motion.div 
+                    initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                    transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden"
+                  >
+                    <div 
+                      className={`px-4 py-3 cursor-pointer hover:bg-blue-50 transition-colors ${useSampling ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setUseSampling(true);
+                        setDropdownOpen(false);
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <svg className="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <div>
+                          <div className="font-medium text-gray-900">Fast Analysis</div>
+                      <div className="text-sm text-gray-600">Full dataset • GPT-4o-mini (faster)</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div 
+                      className={`px-4 py-3 cursor-pointer hover:bg-green-50 transition-colors ${!useSampling ? 'bg-green-50 border-l-4 border-green-500' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setUseSampling(false);
+                        setDropdownOpen(false);
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <div className="font-medium text-gray-900">Deep Analysis</div>
+                          <div className="text-sm text-gray-600">Full dataset • GPT-5 (deeper)</div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </div>
+            <ConfirmRegenerate 
+              useSampling={useSampling}
+              onConfirm={async () => {
+                setError(null);
+                try {
+                  await startGeneration(true);
+                } catch (e: any) {
+                  setError(String(e?.message || e));
+                } finally {
+                  setGenerating(false);
+                  setGenerationStartTime(null);
+                  setEstimatedTimeRemaining(null);
+                  setGenerationProgress("");
+                }
+              }} 
+              disabled={generating} 
+            />
           </div>
         </div>
       </Reveal>
@@ -1008,7 +1300,11 @@ function GenerationLoadingScreen({
   );
 }
 
-function ConfirmRegenerate({ onConfirm, disabled }: { onConfirm: () => void | Promise<void>; disabled?: boolean }) {
+function ConfirmRegenerate({ onConfirm, disabled, useSampling }: { 
+  onConfirm: () => void | Promise<void>; 
+  disabled?: boolean;
+  useSampling: boolean;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -1020,7 +1316,7 @@ function ConfirmRegenerate({ onConfirm, disabled }: { onConfirm: () => void | Pr
           open={open}
           onOpenChange={setOpen}
           title="Are you sure?"
-          description="This will delete the previous summary!"
+          description={`This will delete the previous summary and regenerate using ${useSampling ? 'Fast Analysis (sampled data)' : 'Deep Analysis (full dataset)'}.`}
           confirmText="Yes, regenerate"
           onConfirm={() => {
             setOpen(false);

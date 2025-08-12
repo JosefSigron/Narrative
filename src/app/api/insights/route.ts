@@ -49,20 +49,31 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json(
-      { error: "OpenAI API key is missing. Set OPENAI_API_KEY in your environment." },
-      { status: 500 }
-    );
-  }
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: "OpenAI API key is missing. Set OPENAI_API_KEY in your environment." },
+        { status: 500 }
+      );
+    }
 
-  const { datasetId, regenerate } = await req.json();
-  if (!datasetId) return NextResponse.json({ error: "Missing datasetId" }, { status: 400 });
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+
+    const { datasetId, regenerate, useSampling = true } = requestBody;
+    if (!datasetId) return NextResponse.json({ error: "Missing datasetId" }, { status: 400 });
+
+    console.log(`🚀 Starting insights generation: datasetId=${datasetId}, regenerate=${regenerate}, useSampling=${useSampling}`);
 
   const dataset = await prisma.dataset.findFirst({
     where: { id: datasetId, userId: session.user.id },
@@ -100,7 +111,33 @@ export async function POST(req: NextRequest) {
     return "categorical";
   };
 
-  const allRows: any[] = Array.isArray(dataset.sampleRows) ? (dataset.sampleRows as any[]) : [];
+  // Always use full dataset when available, regardless of mode
+  let allRows: any[] = [];
+  try {
+    if ((dataset as any).fullData) {
+      // Parse full CSV data
+      try {
+        const { parse } = await import('csv-parse/sync');
+        allRows = parse((dataset as any).fullData, { columns: true, skip_empty_lines: true });
+        console.log(`📊 Using full dataset: ${allRows.length} rows`);
+      } catch (error) {
+        console.warn('Failed to parse full data, falling back to sample rows:', error);
+        allRows = Array.isArray(dataset.sampleRows) ? (dataset.sampleRows as any[]) : [];
+      }
+    } else {
+      // Fallback to sample rows if full data is not stored
+      allRows = Array.isArray(dataset.sampleRows) ? (dataset.sampleRows as any[]) : [];
+      console.log(`📊 Full dataset not available; using sampled dataset: ${allRows.length} rows`);
+    }
+
+    if (allRows.length === 0) {
+      console.error('No data available for analysis');
+      return NextResponse.json({ error: "No data available for analysis" }, { status: 400 });
+    }
+  } catch (dataError) {
+    console.error('Data processing error:', dataError);
+    return NextResponse.json({ error: "Failed to process dataset" }, { status: 500 });
+  }
   const downsampleEvenly = (data: any[], max: number) => {
     if (data.length <= max) return data;
     const out: any[] = [];
@@ -268,29 +305,109 @@ Be specific and use actual column names from the dataset.`,
   // Remove legacy prompt (we now build prompts dynamically or use Responses API with files)
 
   let json: any = {};
-  const model = process.env.INSIGHTS_MODEL || "gpt-4o-mini";
+  // Fast (useSampling=true) → GPT-4o-mini, Deep (useSampling=false) → GPT-5
+  const model = useSampling ? "gpt-4o-mini" : "gpt-5";
+  const useAssistants = process.env.INSIGHTS_USE_ASSISTANTS === "true";
+  let usedMode: 'assistants' | 'chat' = useAssistants ? 'assistants' : 'chat';
+  let fallbackReason: string | null = null;
+  // Shared JSON schema to enforce rich output regardless of API path
+  const sharedSchema: any = {
+    name: "InsightsSchema",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        insights: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              title: { type: "string" },
+              content: { type: "string" },
+              score: { type: "number" }
+            },
+            required: ["title", "content", "score"]
+          }
+        },
+        plotGroups: {
+          type: "array",
+          minItems: 4,
+          maxItems: 5,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              groupTitle: { type: "string" },
+              groupNarrative: { type: "string", minLength: 200 },
+              plots: {
+                type: "array",
+                minItems: 2,
+                maxItems: 5,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    type: { type: "string", enum: ["bar", "line", "area", "scatter", "pie", "histogram"] },
+                    spec: {
+                      type: "object",
+                      additionalProperties: false,
+                      properties: {
+                        xKey: { type: "string", minLength: 1 },
+                        yKey: { anyOf: [{ type: "string", minLength: 1 }, { type: "null" }] },
+                        aggregation: { type: "string", enum: ["none", "count", "sum", "avg"] },
+                        dataType: { type: "string", enum: ["categorical", "numeric", "temporal"] }
+                      },
+                      required: ["xKey", "yKey", "aggregation", "dataType"]
+                    },
+                    explanation: { type: "string" }
+                  },
+                  required: ["type", "spec", "explanation"]
+                }
+              }
+            },
+            required: ["groupTitle", "groupNarrative", "plots"]
+          }
+        },
+        summaryMarkdown: { type: "string", minLength: 900 }
+      },
+      required: ["insights", "plotGroups", "summaryMarkdown"]
+    }
+  };
+  
+  console.log(`🤖 Using OpenAI mode: ${useAssistants ? 'Assistants API' : 'Chat Completions'}, Model: ${model}`);
+  
   try {
     let text = "{}";
-    if (process.env.INSIGHTS_USE_ASSISTANTS === "true") {
-      // Responses API + File + json_schema for strict JSON and retrieval
-      // Build CSV from stored sample rows
-      const header = columnsArray.join(",");
-      const esc = (v: any) => {
-        if (v == null) return "";
-        const s = String(v);
-        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-      };
-      const body = allRows.map(r => columnsArray.map(c => esc(r?.[c])).join(",")).join("\n");
-      const datasetCsv = `${header}\n${body}`;
+    if (useAssistants) {
+      try {
+        // Responses API + File + json_schema for strict JSON and retrieval
+        // Build CSV from stored rows (either sampled or full dataset)
+        const header = columnsArray.join(",");
+        const esc = (v: any) => {
+          if (v == null) return "";
+          const s = String(v);
+          return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
+        
+        // For file upload, we use all the processed data (either sampled or full based on user choice)
+        const body = allRows.map(r => columnsArray.map(c => esc(r?.[c])).join(",")).join("\n");
+        const datasetCsv = `${header}\n${body}`;
+        
+        const analysisLabel = useSampling ? 'Fast (Full Dataset, GPT-4o-mini)' : 'Deep (Full Dataset, GPT-5)';
+        console.log(`📊 Dataset Analysis Mode: ${analysisLabel} — ${allRows.length} rows`);
 
-      const fileUpload = await toFile(Buffer.from(datasetCsv, "utf8"), `dataset-${dataset.id}.csv`, { type: "text/csv" });
-      const uploaded = await openai.files.create({ file: fileUpload, purpose: "assistants" });
+        const fileUpload = await toFile(Buffer.from(datasetCsv, "utf8"), `dataset-${dataset.id}.csv`, { type: "text/csv" });
+        const uploaded = await openai.files.create({ file: fileUpload, purpose: "assistants" });
 
       const instructions = `You are a data visualization expert. Analyze ONLY the attached file via file_search. Create 4-5 distinct analysis subjects with 2-5 plots each.
 
 Dataset metadata:
 - Columns: ${columnsArray.join(", ")}
 - Total Row Count: ${dataset.rowCount}
+- Analysis Mode: ${useSampling ? 'Sampled Data (optimized for speed)' : 'Full Dataset (comprehensive analysis)'}
+- Rows in Analysis: ${allRows.length}
 
 CRITICAL REQUIREMENTS:
 1. Create EXACTLY 4-5 DISTINCT plot groups (analysis subjects), each with 2-5 plots
@@ -308,70 +425,8 @@ CRITICAL REQUIREMENTS:
 
 Return strictly valid JSON following the provided schema.`;
 
-      const schema: any = {
-        name: "InsightsSchema",
-        strict: true,
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            insights: {
-              type: "array",
-              items: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  title: { type: "string" },
-                  content: { type: "string" },
-                  score: { type: "number" }
-                },
-                required: ["title", "content"]
-              }
-            },
-            plotGroups: {
-              type: "array",
-              minItems: 4,
-              maxItems: 5,
-              items: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  groupTitle: { type: "string" },
-                  groupNarrative: { type: "string", minLength: 200 },
-                  plots: {
-                    type: "array",
-                    minItems: 2,
-                    maxItems: 5,
-                    items: {
-                      type: "object",
-                      additionalProperties: false,
-                      properties: {
-                        type: { type: "string", enum: ["bar", "line", "area", "scatter", "pie", "histogram"] },
-                        spec: {
-                          type: "object",
-                          additionalProperties: false,
-                          properties: {
-                            xKey: { type: "string", minLength: 1 },
-                            yKey: { anyOf: [{ type: "string", minLength: 1 }, { type: "null" }] },
-                            aggregation: { type: "string", enum: ["none", "count", "sum", "avg"] },
-                            dataType: { type: "string", enum: ["categorical", "numeric", "temporal"] }
-                          },
-                          required: ["xKey", "aggregation", "dataType"]
-                        },
-                        explanation: { type: "string" }
-                      },
-                      required: ["type", "spec"]
-                    }
-                  }
-                },
-                required: ["groupTitle", "groupNarrative", "plots"]
-              }
-            },
-            summaryMarkdown: { type: "string", minLength: 900 }
-          },
-          required: ["plotGroups", "summaryMarkdown"]
-        }
-      };
+      // Use the shared schema for both modes
+      const schema: any = sharedSchema;
 
       // Use Responses API with attachments and file_search tool
       const response = await (openai as any).responses.create({
@@ -384,23 +439,41 @@ Return strictly valid JSON following the provided schema.`;
       });
 
       // Extract text output
-      text = (response as any).output_text
-        || (response as any).output?.[0]?.content?.[0]?.text?.value
-        || (response as any).output?.text
-        || "{}";
-    } else {
-      // Fallback: Chat Completions with compact prompt
+        text = (response as any).output_text
+          || (response as any).output?.[0]?.content?.[0]?.text?.value
+          || (response as any).output?.text
+          || "{}";
+          
+        console.log(`✅ Assistants API completed, response length: ${text.length}`);
+      } catch (assistantError) {
+        fallbackReason = String((assistantError as any)?.message || assistantError);
+        console.error('Assistants API failed, falling back to Chat Completions:', assistantError);
+        usedMode = 'chat';
+        // Fall through to Chat Completions fallback
+      }
+    }
+    
+    // If Assistants API failed or not enabled, use Chat Completions
+    if (!useAssistants || text === "{}") {
+      if (!useAssistants && !fallbackReason) {
+        fallbackReason = 'Assistants mode disabled via INSIGHTS_USE_ASSISTANTS';
+      } else if (text === "{}" && !fallbackReason) {
+        fallbackReason = 'Assistants response was empty or invalid';
+      }
+          console.log('🔄 Using Chat Completions fallback');
+      // Fallback: Chat Completions with compact prompt and strict JSON schema
       const { promptText } = buildPrompt(60);
-      const completion = await openai.chat.completions.create({
+      const completion = await (openai as any).chat.completions.create({
         model,
         messages: [
           { role: "system", content: "You output strictly valid JSON only." },
           { role: "user", content: promptText },
         ],
-        response_format: { type: "json_object" },
+        response_format: { type: "json_schema", json_schema: sharedSchema },
         max_tokens: 4000,
       });
       text = completion.choices?.[0]?.message?.content ?? "{}";
+      console.log(`✅ Chat Completions completed, response length: ${text.length}`);
     }
 
     const tryExtractJson = (raw: string): any => {
@@ -521,13 +594,137 @@ ${JSON.stringify(json).slice(0, 6000)}`;
         console.warn('Plot group expansion failed; using original groups.', expErr);
       }
     }
+
+    // If still missing, synthesize sensible default plot groups and a longer summary
+    const ensureDefaults = async () => {
+      const promptSample = promptRows.slice(0, 40);
+      const numericCols = columnsArray.filter((c) => {
+        const vals = promptSample.map((r) => r?.[c]).filter((v) => v != null && v !== '');
+        if (vals.length === 0) return false;
+        return vals.every((v) => !isNaN(parseFloat(String(v).toString().replace(/[,$%]/g, ''))));
+      });
+      const categoricalCols = columnsArray.filter((c) => {
+        const vals = promptSample.map((r) => r?.[c]).filter((v) => v != null && v !== '');
+        if (vals.length === 0) return false;
+        const distinct = new Set(vals.map((v) => String(v))).size;
+        return distinct > 1 && distinct <= Math.max(20, Math.floor(vals.length * 0.5));
+      });
+      const temporalCols = columnsArray.filter((c) => promptSample.some((r) => isDateLike(r?.[c])));
+
+      if (!Array.isArray(json.plotGroups) || json.plotGroups.length < 4) {
+        const groups: any[] = [];
+        if (numericCols.length > 0) {
+          groups.push({
+            groupTitle: 'Distributions of Key Numeric Variables',
+            groupNarrative: 'We examine distributions of important numeric fields to understand ranges, central tendencies, skewness, and outliers.',
+            plots: numericCols.slice(0, 3).map((col) => ({
+              type: 'histogram',
+              spec: { xKey: col, yKey: null, aggregation: 'none', dataType: 'numeric' },
+              explanation: `Distribution of ${col} to reveal typical ranges and outliers.`
+            }))
+          });
+        }
+        if (categoricalCols.length > 0) {
+          groups.push({
+            groupTitle: 'Category Composition',
+            groupNarrative: 'We summarize how records distribute across key categorical dimensions to expose dominant categories and long-tail structure.',
+            plots: categoricalCols.slice(0, 3).map((col) => ({
+              type: 'bar',
+              spec: { xKey: col, yKey: null, aggregation: 'count', dataType: 'categorical' },
+              explanation: `Frequency of records by ${col}.`
+            }))
+          });
+        }
+        if (temporalCols.length > 0 && numericCols.length > 0) {
+          const t = temporalCols[0];
+          groups.push({
+            groupTitle: 'Temporal Trends',
+            groupNarrative: 'Using available time fields, we analyze how key metrics evolve to detect seasonality and structural shifts.',
+            plots: numericCols.slice(0, 2).map((num) => ({
+              type: 'line',
+              spec: { xKey: t, yKey: num, aggregation: 'avg', dataType: 'temporal' },
+              explanation: `Trend of ${num} over ${t}.`
+            }))
+          });
+        }
+        if (numericCols.length >= 2) {
+          groups.push({
+            groupTitle: 'Relationships Between Metrics',
+            groupNarrative: 'We explore pairwise relationships among numeric fields to uncover associations and potential drivers.',
+            plots: [
+              { type: 'scatter', spec: { xKey: numericCols[0], yKey: numericCols[1], aggregation: 'none', dataType: 'numeric' }, explanation: `Relationship between ${numericCols[0]} and ${numericCols[1]}.` }
+            ]
+          });
+        }
+        // Absolute fallback: if detection produced no groups, synthesize from first few columns
+        if (groups.length === 0 && columnsArray.length > 0) {
+          const firstCols = columnsArray.slice(0, Math.min(4, columnsArray.length));
+          const plots: any[] = [];
+          for (const c of firstCols) {
+            const vals = promptSample.map(r => r?.[c]).filter(v => v != null && v !== '');
+            const numeric = vals.length > 0 && vals.every(v => !isNaN(parseFloat(String(v).toString().replace(/[,$%]/g, ''))));
+            if (numeric) {
+              plots.push({ type: 'histogram', spec: { xKey: c, yKey: null, aggregation: 'none', dataType: 'numeric' }, explanation: `Distribution of ${c}.` });
+            } else {
+              plots.push({ type: 'bar', spec: { xKey: c, yKey: null, aggregation: 'count', dataType: 'categorical' }, explanation: `Counts by ${c}.` });
+            }
+          }
+          if (plots.length > 0) {
+            groups.push({
+              groupTitle: 'Overview of Core Columns',
+              groupNarrative: 'An automatically generated overview using the first few columns to ensure a minimal, useful visualization set.',
+              plots: plots.slice(0, 5)
+            });
+          }
+        }
+
+        if (groups.length > 0) {
+          json.plotGroups = groups.slice(0, 5);
+        }
+      }
+
+      const haveLong = typeof json.summaryMarkdown === 'string' && json.summaryMarkdown.trim().length >= 900;
+      const haveAny = haveLong || (typeof json.summary === 'string' && json.summary.trim().length > 0);
+      if (!haveAny) {
+        const prompt = `Create an engaging, multi-paragraph executive summary of the dataset and the analyses (>= 900 chars). Then add a section titled "Further exploration ideas" with 8-12 bullet points grounded in the provided columns and sample data.\n\nCOLUMNS: ${columnsText}\nPROFILE: ${profileTextFull}\nSAMPLE ROWS: ${JSON.stringify(promptRows.slice(0, 30))}`;
+        try {
+          const completion = await openai.chat.completions.create({
+            model,
+            messages: [
+              { role: 'system', content: 'Write only the markdown content. Do not include any JSON.' },
+              { role: 'user', content: prompt }
+            ],
+            max_tokens: 1200
+          });
+          json.summaryMarkdown = completion.choices?.[0]?.message?.content || '';
+        } catch {
+          json.summaryMarkdown = 'Summary\nNo summary available.\n\nFurther exploration ideas\n- Segment by categories\n- Compare time periods\n- Investigate correlations\n- Examine distributions';
+        }
+      }
+
+      // Ensure at least one insight exists to satisfy schema and UI expectations
+      if (!Array.isArray(json.insights) || json.insights.length === 0) {
+        json.insights = [
+          {
+            title: 'Initial observations',
+            content: 'Automated baseline insights were generated from the dataset profile and sample rows.',
+            score: 0.5
+          }
+        ];
+      }
+    };
+
+    await ensureDefaults();
   } catch (err: any) {
+    console.error('OpenAI API error:', err);
     const detail = (err?.response?.data?.error?.message) || err?.message || String(err);
     return NextResponse.json({ error: "OpenAI error", detail }, { status: 500 });
   }
 
+  console.log('💾 Starting database transaction...');
   const created = await prisma.$transaction(async (tx) => {
     if (regenerate) {
+      console.log('🗑️ Regenerating: Clearing existing data...');
       await tx.insight.deleteMany({ where: { datasetId: dataset.id } });
       await tx.chart.deleteMany({ where: { datasetId: dataset.id } });
       await tx.report.deleteMany({ where: { datasetId: dataset.id } });
@@ -562,8 +759,18 @@ ${JSON.stringify(json).slice(0, 6000)}`;
       },
     });
     const results = await Promise.all([...insightCreates, ...chartCreates, reportCreate]);
+    console.log(`✅ Database transaction completed: ${results.length} items created`);
     return results.length;
   });
 
-  return NextResponse.json({ ok: true, created });
+  console.log(`🎉 Generation completed successfully: ${created} items created`);
+  return NextResponse.json({ ok: true, created, mode: usedMode, model, rowsAnalyzed: allRows.length, fallbackReason });
+  
+  } catch (error: any) {
+    console.error('Insights generation failed:', error);
+    return NextResponse.json({ 
+      error: "Generation failed", 
+      detail: error?.message || String(error) 
+    }, { status: 500 });
+  }
 }

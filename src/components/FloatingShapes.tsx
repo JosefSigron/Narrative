@@ -28,10 +28,10 @@ export default function FloatingShapes() {
 
   return (
     <div ref={ref} className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-      <div className="absolute -top-6 left-6 w-24 h-24 rounded-full bg-pacific_cyan-500/15 blur-2xl" data-shape />
-      <div className="absolute top-12 right-10 w-32 h-32 rounded-full bg-marian_blue-500/15 blur-2xl" data-shape />
-      <div className="absolute bottom-10 left-1/3 w-28 h-28 rounded-full bg-blue_green-500/15 blur-2xl" data-shape />
-      <div className="absolute top-1/3 right-1/4 w-20 h-20 rounded-full bg-honolulu_blue-500/15 blur-2xl" data-shape />
+      <div className="absolute -top-6 left-6 w-24 h-24 rounded-full bg-saffron-500/20 blur-2xl" data-shape />
+      <div className="absolute top-12 right-10 w-32 h-32 rounded-full bg-sandy_brown-500/20 blur-2xl" data-shape />
+      <div className="absolute bottom-10 left-1/3 w-28 h-28 rounded-full bg-burnt_sienna-500/20 blur-2xl" data-shape />
+      <div className="absolute top-1/3 right-1/4 w-20 h-20 rounded-full bg-persian_green-500/15 blur-2xl" data-shape />
     </div>
   );
 }

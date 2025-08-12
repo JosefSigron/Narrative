@@ -43,7 +43,7 @@ export default async function DashboardPage() {
       </Reveal>
 
       <Reveal mode='toggle'>
-        <Card>
+        <Card className="bg-card">
           <CardHeader>
             <CardTitle className='text-lg'>Upload dataset</CardTitle>
           </CardHeader>
